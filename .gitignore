@@ -1,0 +1,22 @@
+# ESP-IDF build output
+/build/
+/build_*/
+
+# Generated project configuration
+/sdkconfig
+/sdkconfig.old
+
+# ESP-IDF Component Manager generated files
+/dependencies.lock
+/managed_components/
+
+# Local editor and language-server settings
+/.vscode/
+/.clangd
+/.cache/
+*.swp
+*.swo
+*~
+
+# macOS metadata
+.DS_Store
