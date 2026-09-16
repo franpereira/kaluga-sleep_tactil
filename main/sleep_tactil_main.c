@@ -34,6 +34,7 @@
 #include "driver/touch_sens.h"
 #include "driver/uart.h"
 #include "esp_attr.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
 #include "esp_timer.h"
@@ -45,8 +46,6 @@
 
 /* --- Parámetros del ciclo. Son los que tocarás en la App 3. -------------- */
 
-/* Duración de la fase activa antes de pasar a light sleep. */
-#define ACTIVO_MS               10000
 /* Plazo máximo de cada light sleep; también se sale con un toque. */
 #define LIGHT_SLEEP_MS          5000
 /* Cuántas rondas de light sleep antes de irse a deep sleep. */
@@ -80,7 +79,7 @@ static const char *TAG = "sleep_tactil";
 typedef enum {
     ACC_DESPERTAR = 0,   /* solo despierta; es el canal de deep sleep */
     ACC_AVANZAR,         /* fuerza el paso al modo siguiente          */
-    ACC_PROLONGAR,       /* reinicia el contador de la fase activa    */
+    ACC_MEMORIA,         /* muestra el estado actual de la memoria    */
 } accion_t;
 
 typedef struct {
@@ -94,7 +93,7 @@ typedef struct {
 static const boton_t BOTONES[] = {
     {  5, "RECORD",  ACC_DESPERTAR },
     {  2, "PLAY",    ACC_AVANZAR   },
-    {  1, "VOL_UP",  ACC_PROLONGAR },
+    { 11, "NETWORK", ACC_MEMORIA   },
 };
 #define BOTONES_N   (sizeof(BOTONES) / sizeof(BOTONES[0]))
 #define CANAL_DEEP_SLEEP   0        /* índice en BOTONES */
@@ -352,6 +351,19 @@ static void informar_balance(void)
     ESP_LOGI(TAG, "  (corrientes del datasheet, no medidas: ver el README)");
 }
 
+static void imprimir_memoria(void)
+{
+    const size_t total = heap_caps_get_total_size(MALLOC_CAP_8BIT);
+    const size_t libre = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    const size_t usada = total - libre;
+
+    ESP_LOGI(TAG, "--- Memoria RAM ---");
+    ESP_LOGI(TAG, "  %12s | %12s | %12s",
+             "total", "usada", "libre");
+    ESP_LOGI(TAG, "  %12u | %12u | %12u",
+             (unsigned)total, (unsigned)usada, (unsigned)libre);
+}
+
 /* Deja el sistema en condiciones de dormir: LED apagado y consola vaciada.
  * Un LED encendido son decenas de mA; el mensaje a medio enviar se pierde. */
 static void preparar_sueno(void)
@@ -362,26 +374,18 @@ static void preparar_sueno(void)
 
 /* ----------------------------------------------------------- fases ------ */
 
-/* Fase activa: el LED verde indica "despierto". Sale por plazo cumplido o
- * porque alguien pulsó PLAY. Devuelve los µs realmente pasados aquí. */
+/* Fase activa: el LED verde indica "despierto". No tiene temporizador: sale
+ * cuando alguien pulsa PLAY. NETWORK muestra la memoria sin cambiar de fase. */
 static int64_t fase_activa(void)
 {
     const int64_t inicio = esp_timer_get_time();
-    int64_t limite_us = inicio + (int64_t)ACTIVO_MS * 1000;
     evento_t ev;
 
     led(0, 24, 0);
-    ESP_LOGI(TAG, "[ACTIVO] %d ms  ·  PLAY = avanzar ya  ·  VOL_UP = prolongar",
-             ACTIVO_MS);
+    ESP_LOGI(TAG, "[ACTIVO]  ·  PLAY = avanzar  ·  NETWORK = memoria");
 
     while (1) {
-        const int64_t ahora = esp_timer_get_time();
-        if (ahora >= limite_us) {
-            break;
-        }
-        const TickType_t espera = pdMS_TO_TICKS((limite_us - ahora) / 1000 + 1);
-
-        if (xQueueReceive(s_cola, &ev, espera) != pdTRUE) {
+        if (xQueueReceive(s_cola, &ev, portMAX_DELAY) != pdTRUE) {
             continue;
         }
         const boton_t *b = boton_de_canal(ev.canal);
@@ -394,9 +398,8 @@ static int64_t fase_activa(void)
         if (b->accion == ACC_AVANZAR) {
             break;
         }
-        if (b->accion == ACC_PROLONGAR) {
-            limite_us = esp_timer_get_time() + (int64_t)ACTIVO_MS * 1000;
-            ESP_LOGI(TAG, "  fase activa prolongada %d ms mas", ACTIVO_MS);
+        if (b->accion == ACC_MEMORIA) {
+            imprimir_memoria();
         }
     }
 

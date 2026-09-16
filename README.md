@@ -9,7 +9,7 @@ despertando por los **botones táctiles** de la **ESP-LyraP-TouchA**, y publica
 el **balance de consumo** de cada ciclo por el monitor serie.
 
 ```
-   ACTIVO 10 s ──▶ LIGHT SLEEP ──(toque o plazo)──▶ ACTIVO ──▶ …
+   ACTIVO ──(PLAY)──▶ LIGHT SLEEP ──(toque o plazo)──▶ ACTIVO ──▶ …
        │                                                        │
        └────── tras 3 rondas ──▶ DEEP SLEEP ──(toque RECORD)────┘
                                      │
@@ -38,7 +38,7 @@ La diferencia que hay que ver con los propios ojos:
 |---|:-:|:-:|---|
 | **RECORD** | T5 | 5 | **Despierta del *deep sleep*** (el "botón de encendido") |
 | **PLAY** | T2 | 2 | Fuerza el paso al modo siguiente |
-| **VOL_UP** | T1 | 1 | Prolonga la fase activa otros 10 s |
+| **NETWORK** | T11 | 11 | Muestra la RAM total, usada y libre durante la fase activa |
 | Cualquiera de los tres | — | — | Despierta del *light sleep* |
 
 > En *deep sleep* solo el **canal designado** puede despertar el chip: es el
@@ -94,8 +94,8 @@ idf.py -p /dev/cu.usbserial-XXXX flash monitor
    (`active_thresh = benchmark × 2 %`), igual que en la Clase 2.
 5. **Configura el táctil como fuente de *wake-up*** con
    `touch_sensor_config_sleep_wakeup()`, designando el canal de *deep sleep*.
-6. **Recorre el ciclo**: fase activa → tres rondas de *light sleep* →
-   *deep sleep*.
+6. **Recorre el ciclo**: fase activa hasta **PLAY** → tres rondas de
+   *light sleep* → *deep sleep*. En la fase activa, **NETWORK** muestra la RAM total, usada y libre.
 
 > ⚠️ **No toques la placa durante el arranque.** Si el `benchmark` inicial se
 > mide con el dedo apoyado, ese botón no se activará hasta el siguiente reset.
@@ -119,9 +119,9 @@ W (330) touch: Keep the RTC_PERIPH power on in case the false trigger
 I (335) sleep_tactil: Calibrando... NO toques la placa durante el arranque
 I (352) sleep_tactil:   RECORD   T5   benchmark=41230  umbral=824
 I (353) sleep_tactil:   PLAY     T2   benchmark=40887  umbral=817
-I (354) sleep_tactil:   VOL_UP   T1   benchmark=39954  umbral=799
+I (354) sleep_tactil:   NETWORK  T11  benchmark=39954  umbral=799
 I (356) sleep_tactil: Canal de deep sleep: RECORD (T5, GPIO5)
-I (357) sleep_tactil: [ACTIVO] 10000 ms  ·  PLAY = avanzar ya  ·  VOL_UP = prolongar
+I (357) sleep_tactil: [ACTIVO]  ·  PLAY = avanzar  ·  NETWORK = memoria
 I (2104) sleep_tactil:   toque en PLAY (T2), latencia ISR->tarea 37 us
 I (2105) sleep_tactil: [LIGHT SLEEP] ronda 1/3, hasta 5000 ms o hasta que toques
 I (7108) sleep_tactil:   vencio el PLAZO tras 5001 ms
@@ -137,7 +137,6 @@ Están todos juntos al principio del `.c`:
 
 | Constante | Qué es | Valor |
 |---|---|---|
-| `ACTIVO_MS` | Duración de la fase activa | 10 000 ms |
 | `LIGHT_SLEEP_MS` | Plazo máximo de cada *light sleep* | 5 000 ms |
 | `RONDAS_LIGHT` | Cuántos *light sleep* antes del *deep sleep* | 3 |
 | `DEEP_SLEEP_S` | Plazo de respaldo del *deep sleep* | 30 s |
@@ -171,8 +170,7 @@ haces— sirve para **explicar la diferencia**, que es donde está el aprendizaj
 
 | Experimento | Qué observar |
 |---|---|
-| Subir `ACTIVO_MS` a 30 000 | La corriente media se dispara: manda el ciclo de trabajo |
-| Bajar `ACTIVO_MS` a 2 000 | La media baja mucho más de lo que parece |
+| Esperar más antes de pulsar PLAY | La corriente media se dispara: manda el ciclo de trabajo |
 | `RONDAS_LIGHT = 0` | Se va directo a *deep sleep*: media mínima, respuesta peor |
 | Poner un `ESP_LOGI` después de `esp_deep_sleep_start()` | No se ejecuta jamás: la función es `noreturn` |
 | Quitar `preparar_sueno()` | El último mensaje sale cortado y el LED queda encendido |
